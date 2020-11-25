@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 # mypackages
 from utils.datasets import load
+from utils.metrics import *
 # sklearn
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
@@ -30,14 +31,14 @@ class MLGCN(nn.Module):
     def __init__(self, ins_feat_dim, label_embeds_dim):
         super().__init__()
         in_dim, out_dim = label_embeds_dim, ins_feat_dim
-        hid_dim = int(in_dim / 2 + out_dim / 2)
-        self.gc1 = GraphConv(in_dim, hid_dim)
-        self.gc2 = GraphConv(hid_dim, out_dim)
+        self.gc1 = GraphConv(in_dim, 32)
+        self.gc2 = GraphConv(32, 16)
+        self.gc3 = GraphConv(16, out_dim)
     
     def forward(self, X, label_embeds, label_graph):
-        h = self.gc1(label_graph, label_embeds)
-        h = torch.relu(h)
-        h = self.gc2(label_graph, h).t()
+        h = torch.relu(self.gc1(label_graph, label_embeds))
+        h = torch.relu(self.gc2(label_graph, h))
+        h = torch.relu(self.gc3(label_graph, h)).t()
         return torch.sigmoid(X.mm(h))
 
 def get_label_cooccur(label_matrix:np.ndarray, n_jobs=None):
@@ -69,9 +70,10 @@ def construct_label_graph(label_matrix:np.ndarray,
     A_zero_diag = P * (np.ones_like(P) - np.eye(P.shape[0]))
 
 
-X, _, Y = load("SJAFFE", return_X_y=True)
-Xr, Xs, Yr, Ys = train_test_split(X, Y, random_state=0)
-label_embeds = PCA(n_components=32).fit_transform(Yr.T)
+X, Y, YD = load("Yeast_alpha")
+Xr, Xs, Yr, Ys, YDr, YDs = train_test_split(X, Y, YD, random_state=0)
+label_embeds = PCA(n_components=8).fit_transform(Yr.T)
+# label_embeds = Yr.copy().T
 label_graph = dgl.from_scipy(construct_label_graph(Yr, is_reweight=False))
 
 # to tensor
@@ -81,9 +83,10 @@ label_embeds = torch.from_numpy(label_embeds).float()
 
 mlgcn = MLGCN(Xr.shape[1], label_embeds.shape[1])
 lossfns = [nn.CrossEntropyLoss() for _ in range(Yr.shape[1])]
-optimizer = torch.optim.Adam(mlgcn.parameters(), lr=1e-4)
+optimizer = torch.optim.Adam(mlgcn.parameters(), lr=5e-3)
+uniform = torch.ones_like(Yr).float() / Yr.shape[1]
 
-for epoch in range(1000):
+for epoch in range(5000):
     optimizer.zero_grad()
     Ypred = mlgcn(Xr, label_embeds, label_graph)
     loss_sum = 0
@@ -91,7 +94,14 @@ for epoch in range(1000):
         P = Ypred[:, i].reshape(-1, 1)
         Yp = torch.cat([1-P, P], dim=1)
         loss_sum += lossfns[i](Yp, Yr[:, i])
+    # Ypred_smx = torch.softmax(Ypred, dim=1)
+    # loss_sum += 1e-2 * torch.norm(uniform - Ypred_smx)    
     loss_sum.backward()
     optimizer.step()
-    if epoch % 100 == 0:
-        print(loss_sum.item())
+    if epoch % 5 == 0:
+        print(epoch, loss_sum.item(), "kl: ", 
+            kldivergence(YDr, torch.softmax(Ypred.detach(), dim=1).numpy())
+        )
+
+Ypred = torch.softmax(mlgcn(Xr, label_embeds, label_graph), dim=1)
+
