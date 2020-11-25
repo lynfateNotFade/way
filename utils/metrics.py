@@ -27,7 +27,7 @@ def squared_chi2(distribution_real, distribution_predict):
 
 def kldivergence(distribution_real, distribution_predict):
     height = distribution_real.shape[0]
-    return np.sum(distribution_real * np.log(distribution_real / distribution_predict)) / height
+    return np.sum(distribution_real * np.log((distribution_real+1e-15) / (distribution_predict + 1e-15))) / height
 
 
 def intersection(distribution_real, distribution_predict):
