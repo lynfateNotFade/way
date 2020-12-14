@@ -6,7 +6,7 @@ sys.path.append("..")
 
 class DatasetObject:
     def __init__(self, f, ll, ld):
-        self.feat = f
+        self.feature = f
         self.logical_label = ll
         self.label_distribution = ld
 

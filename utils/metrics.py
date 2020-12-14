@@ -63,3 +63,9 @@ def cosine(distribution_real, distribution_predict):
     height = distribution_real.shape[0]
     return np.sum(np.sum(distribution_real*distribution_predict, 1) / (np.sqrt(np.sum(distribution_real**2, 1)) *\
            np.sqrt(np.sum(distribution_predict**2, 1)))) / height
+
+def softmax(Y, axis=1):
+    if len(Y.shape) == 1:
+        return np.exp(Y) / np.exp(Y).sum()
+    Y = np.exp(Y)
+    return Y / Y.sum(axis=axis, keepdims=True)
