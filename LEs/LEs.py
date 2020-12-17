@@ -82,16 +82,30 @@ class LEML:
         # learning D
         W = W.detach().numpy()[:,0,:]
 
-
-        
-
         return self
 
     def score(self, distribution):
         pass
     
 
-X, ll, ld = load("SJAFFE", return_X_y=True)
-score = LELP(n_jobs=3).fit(X, ll).score(ld, "cosine")
-print(score)
+# X, ll, ld = load("SJAFFE", return_X_y=True)
+# score = LELP(n_jobs=3).fit(X, ll).score(ld, "cosine")
+# print(score)
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+_, _, ld = load("Natural_Scene")
+# draw_distribution(ld[:, 0])
+fig, axs = plt.subplots(3, 2)
+
+for i in range(3):
+    for j in range(2):
+        t = i * 2 + j
+        sns.histplot(ld[:, t], kde=True, ax=axs[i, j],)
+        axs[i, j].set_ylabel('')
+plt.show()
+
+
+# sns.displot(ld[:, 0], bins=80, kde=True)
+# plt.show()
