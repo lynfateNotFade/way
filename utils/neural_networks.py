@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import torch.utils.data as Data
+import torch.nn.functional as F
 
 def gauss_kl_loss(mu,sigma,eps = 1e-12):
     mu_square = torch.pow(mu,2)
@@ -11,6 +13,11 @@ def gauss_kl_loss(mu,sigma,eps = 1e-12):
 class VariationalAutoEncoder(nn.Module):
     
     def __init__(self, in_dim, hid_dim, drop_prob=0.0,):
+        '''
+        in_dim: the dimension of data space.
+        hid_dim: arbitrary
+        forword function returns (mu, sigma), estimated_data
+        '''
         super().__init__()
         self.inference_ = nn.Sequential(
             nn.Linear(in_dim, hid_dim), nn.ELU(), nn.Dropout(drop_prob),
@@ -41,31 +48,31 @@ class VariationalAutoEncoder(nn.Module):
         return (mu, sigma), X
 
 
-from datasets import load
-import torch.utils.data as Data
-import torch.nn.functional as F
 
-X, ll, ld = load("SJAFFE")
-X = torch.from_numpy(X).float()
-loader = Data.DataLoader(
-    dataset=Data.TensorDataset(X), 
-    batch_size=100,
-    shuffle=True
+def variational_density_estimate(X):
+    if not isinstance(X, torch.Tensor):
+        X = torch.FloatTensor(X)
+    loader = Data.DataLoader(
+        dataset=Data.TensorDataset(X),
+        batch_size=100,
+        shuffle=True
     )
+    vae = VariationalAutoEncoder(X.shape[1], 128)
+    optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
+    loss_series = []
+    for epoch in range(300):
+        loss = 0
+        for batch_id, (x,) in enumerate(loader):
+            optimizer.zero_grad()
+            (mu, sigma), xhat = vae(x)
+            gauss_loss = gauss_kl_loss(mu, sigma)
+            rec_loss = F.mse_loss(xhat, x)
+            loss = 0.5 * gauss_loss + rec_loss
+            loss.backward()
+            optimizer.step()
+        if epoch % 20 == 0:
+            loss_series.append(round(loss.item(), 3))
 
-vae = VariationalAutoEncoder(X.shape[1], 128)
-optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
-for epoch in range(100):
-    for batch_id, (x,) in enumerate(loader):
-        optimizer.zero_grad()
-        (mu, sigma), xhat = vae(x)
-        gauss_loss = gauss_kl_loss(mu, sigma)
-        rec_loss = F.mse_loss(xhat, x)
-        loss = 0.5 * gauss_loss + rec_loss
-        loss.backward()
-        optimizer.step()
-
-(mu, sigma), _ = vae(X)
-
-sample = torch.randn(mu.shape) * sigma + mu
-print(sample.shape)
+    (mu, sigma), _ = vae(X)
+    print(loss_series)
+    return mu, sigma
