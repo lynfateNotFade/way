@@ -80,7 +80,7 @@ def variational_density_estimate(X, feat_dim, label_dim):
     )
     vae = VariationalAutoEncoder(feat_dim, label_dim, 128)
     optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
-    for epoch in range(900):
+    for epoch in range(300):
         loss = 0
         for batch_id, (x,) in enumerate(loader):
             optimizer.zero_grad()
@@ -108,11 +108,12 @@ X, ll, ld = load("SBU_3DFE")
 X, Xs, ld, ls = train_test_split(X, ld, test_size=0.9)
 print("training set contains %d instances.\ntest set contains %d instances" % (X.shape[0], Xs.shape[0]))
 
-est = NeuralLDRegressor(epoches=2000).fit(X, ld)
+est = NeuralLDRegressor(epoches=200).fit(X, ld)
 print(cosine(ls, est.predict(Xs)))
 print(kldivergence(ls, est.predict(Xs)))
 
-divider = KMeans(n_clusters=ld.shape[1] * 3, random_state=0).fit(X)
+divider = AffinityPropagation(random_state=0).fit(ld)
+print("# of clusters: %d" % np.unique(divider.labels_).size)
 cluster_ids = divider.labels_
 Xadd, Yadd = [], []
 
@@ -122,7 +123,7 @@ for clu_id in np.unique(cluster_ids):
         X[cluster_ids == clu_id]
     ], axis=1)
     (feat_mu, feat_sigma), (label_mu, label_sigma) = variational_density_estimate(data, X.shape[1], ld.shape[1])
-    for _ in range(5):
+    for _ in range(3):
         Xadd.append(feat_mu + feat_sigma * torch.randn(feat_mu.shape))
         Yadd.append(label_mu + label_sigma * torch.randn(label_mu.shape))
 Xadd = torch.cat(Xadd, dim=0).numpy()
@@ -131,6 +132,6 @@ X = np.concatenate([Xadd, X], axis=0)
 ld = np.concatenate([Yadd, ld], axis=0)
 print(X.shape)
 print(ld.shape)
-est = NeuralLDRegressor(epoches=2000).fit(X, ld)
+est = NeuralLDRegressor(epoches=200).fit(X, ld)
 print(cosine(ls, est.predict(Xs)))
 print(kldivergence(ls, est.predict(Xs)))
