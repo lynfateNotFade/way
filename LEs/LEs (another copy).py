@@ -80,7 +80,6 @@ def variational_density_estimate(X, feat_dim, label_dim):
     )
     vae = VariationalAutoEncoder(feat_dim, label_dim, 128)
     optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
-    loss_series = []
     for epoch in range(900):
         loss = 0
         for batch_id, (x,) in enumerate(loader):
@@ -93,21 +92,27 @@ def variational_density_estimate(X, feat_dim, label_dim):
             loss = 0.5 * gauss_loss + rec_loss
             loss.backward()
             optimizer.step()
-        if epoch % 20 == 0:
-            loss_series.append(round(loss.item(), 3))
+    
+    grad_sum = 0
+    for param in list(vae.parameters()):
+        if len(param) != 2:
+            continue
+        W, b = list(layer.parameters())
+        grad_sum += (W.grad.sum() + b.grad.sum()) 
 
     (feat_mu, feat_sigma), (label_mu, label_sigma), _ = vae(X, feat_dim, label_dim)
-    print(loss_series)
+    print("[VariationalAutoEncoder is trained] Gradient sum: %.5f" % grad_sum)
     return (feat_mu.detach(), feat_sigma.detach()), (label_mu.detach(), label_sigma.detach())
 
-X, ll, ld = load("SJAFFE")
+X, ll, ld = load("SBU_3DFE")
 X, Xs, ld, ls = train_test_split(X, ld, test_size=0.9)
+print("training set contains %d instances.\ntest set contains %d instances" % (X.shape[0], Xs.shape[0]))
 
-est = NeuralLDRegressor().fit(X, ld)
-print(est.grad_sum_)
+est = NeuralLDRegressor(epoches=2000).fit(X, ld)
 print(cosine(ls, est.predict(Xs)))
+print(kldivergence(ls, est.predict(Xs)))
 
-divider = KMeans(n_clusters=ld.shape[1]).fit(X)
+divider = KMeans(n_clusters=ld.shape[1] * 3, random_state=0).fit(X)
 cluster_ids = divider.labels_
 Xadd, Yadd = [], []
 
@@ -116,15 +121,16 @@ for clu_id in np.unique(cluster_ids):
         ld[cluster_ids == clu_id],
         X[cluster_ids == clu_id]
     ], axis=1)
-    _, (label_mu, label_sigma) = variational_density_estimate(data, X.shape[1], ld.shape[1])
-    
-    Xadd.append(feat_mu + feat_sigma * torch.randn(feat_mu.shape))
-    Yadd.append(label_mu + label_sigma * torch.randn(label_mu.shape))
-Xadd = np.concatenate(Xadd, axis=0)
+    (feat_mu, feat_sigma), (label_mu, label_sigma) = variational_density_estimate(data, X.shape[1], ld.shape[1])
+    for _ in range(5):
+        Xadd.append(feat_mu + feat_sigma * torch.randn(feat_mu.shape))
+        Yadd.append(label_mu + label_sigma * torch.randn(label_mu.shape))
+Xadd = torch.cat(Xadd, dim=0).numpy()
 Yadd = torch.cat(Yadd, dim=0).numpy()
 X = np.concatenate([Xadd, X], axis=0)
 ld = np.concatenate([Yadd, ld], axis=0)
-
-est = NeuralLDRegressor(epoches=1000).fit(X, ld)
-print(est.grad_sum_)
+print(X.shape)
+print(ld.shape)
+est = NeuralLDRegressor(epoches=2000).fit(X, ld)
 print(cosine(ls, est.predict(Xs)))
+print(kldivergence(ls, est.predict(Xs)))

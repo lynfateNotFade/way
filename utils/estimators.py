@@ -33,12 +33,14 @@ class NeuralLDRegressor:
             optimizer.step()
         
         grad_sum = 0
-        for layer in self._n:
-            if len(list(layer.parameters())) != 2:
+        for param in list(self._n.parameters()):
+            if len(param) != 2:
                 continue
-            W, b = list(layer.parameters())
+            W, b = list(param)
             grad_sum += (W.grad.sum() + b.grad.sum()) 
         self.grad_sum_ = grad_sum
+
+        print("[NeuralLDRegressor is trained] Gradient sum: %.5f" % grad_sum)
         return self
     
     def predict(self, X):
